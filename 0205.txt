@@ -1,0 +1,29 @@
+SKT Lora-> MQTT를 통한 ThingPlug 접속 방법
+java로 mqtt해보기 -> https://twinw.tistory.com/163 -> 파일 터미널로 압축해제(unzip 파일이름.zip) -> sudo apt-get install openjdk-8-jdk로 자바 설치
+
+-MQTT:시스템에 참여하는 장치들의 처리 능력, 네트워크 대역폭, 메시지 오버헤드 등 주변상황에 맞게 시스템이 동작할 수 있도록 3단계 QoS(Quality of Service) 를 제공,
+0번:메시지는 한번만 전달하며, 전달여부를 확인하지 않는다. Fire and Forget(한번 쏘고 잊어버리는) 타입이다
+1번 : 메시지는 반드시 한번 이상 전달된다. 하지만 메시지의 핸드셰이킹 과정을 엄밀하게 추적하지 않기 때문에, 중복전송될 수도 있다.
+2번 : 메시지는 한번만 전달된다. 메시지의 핸드셰이킹 과정을 추적한다. 높은 품질을 보장하지만 성능의 희생이 따른다.
+
+1.MQTT : MQTT는 TCP기반의 경량화된 Publish-Subscribe 메시지 프로토콜임. Publish-Subscribe은 SW아키텍처 스타일에서 등장하는 모델과 동일한 내용
+
+2.CoAP : CoAP는 저전력 비동기 통신 프로토콜 임. MQTT와는 다르게 UDP를 기반으로 비동기 통신을 사용,대신 TCP와 다르게 전송 여부 신뢰성을 확인할 수 없으므로 Confirmation/Non-Confirmation message, Reset Message 같은 메시지를 통해 보완.
+CoAP는 MQTT와 다르게 1:1 프로토콜이며 Pub/Sub 메세지큐 기능을 사용하지 못 함.
+
+-coAP예제: coAP디렉토리가서 gitclone을 시켜줌. 터미널에서 주소를 긁어서 git clone https://github.com/Tanganelli/CoAPthon3  해주면 그 디렉토리 밑으로 쭉 copy가 됨
+그 후 CoAP3 디렉토리로 들억서 sudo apt-get install python-pip 시켜줌 -> sudo pip3 install CoAPthon ->sudo python3 ./setup.py sdist ->sudo pip3 install dist/CoAPthon3-1.0.1.tar.gz -r requirements.txt-
+->python3 coapserver.py -i 192.168.1.82(coap의 서버)
+->python3 coapclient.py -o GET -p coap://192.168.1.82/advanced(coap의 client, advanced라는 명령어를 실행하는듯),advancde뿐만 아니라 basic,child,storage등 이 있음.
+
+
+멀티캐스트 defult로 udp이다.
+p321~p325까지 멀티캐스트 send와 receiver의 구현(단순한 socket programming과 차이 나는거을 확인해라.)
+->news_sender.c , news_receiver.c로 구현->여기서 말하는 그룹IP가 필요한데,멀티캐스트 그룹이란 클래스 D에 속하는 IP주소(224.0.0.0 ~ 239.255.255.255) ->receiver를 두개 이 상열어놓으면 bind()에러가 뜨는걸,setsocket(reusr)를 통해 오류를 없애줄수있다. ->여기선 sender(server)가 인터넷강의 ,receiver(client)가 수강생들이기에 하나의 sender에 다수의 receiver가 열어있는 걸 의미
+->receiver의 bind함수 위에 구현
+optlen=sizeof(option);
+option=TRUE;
+setsockopt(recv_sock,SOL_SOCKET,SO_REUSEADDR,(void*)&option,optlen); -> news_receiver를 여러개를 띄우고 , news_sender를 실행시키면 sender가 보내는 데이터가 다중의 receiver에서 받을 수 있다.(즉 다중접속이 가능하지만 다른 방식으로는 UDP가 있는데 보안점이 취약)
+
+p244 프로세스 기반의 다중 접속 서버 모델->전까지는 한번의 하나의 클라이언트에게만 서비스를 제공할수있엇는데 이젠 동시에 둘 이상의 클라이언트에게 서비스를 제공하는 형태로 구현해볼것.->즉 TCP로 각각 하나의 동시 다중 접속을 만들겠다.->부모프로세스가 fork가 해서 클라이언트의 요청이오면 그 클라이언트의 요청을 부모프로세스가 fork를 해서 자식 프로세스를 생성하고 자식 프로세스와 연결을 시키며 반복시킴
+p244 echo_mpserv.c를 서버, p114 echo_client.c를 사용하여 다중접속을 해보자.(setsocket(reusr):bind를 초기화 시켜주어서 다중 접속이 가능하도록 해주는 소켓옵션)->server하나에 client를 여러개 띄워나서 접속가능

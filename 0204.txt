@@ -1,0 +1,43 @@
+IOT를 통신하기 위한 표준 프로토콜:MQTT,COAP
+MQTT 브로커: 서버 
+MQTT:클라이언트라는 고객이 가운데의 브로커라는 서버를 통해서 서로 정보를 주고받는 시스템->클라이언트(publish)가 보내주면 받는 클라이언트(subscribe)가 있고 가운데의 mosquitto 라는 브로커를 통해서 정보를 주고받는다.
+http://www.hardcopyworld.com/ngine/aduino/index.php/archives/3369
+- mosquitto_pub -d -t messagebox -m “sent from RPi server” : massgebox(변수)에 "sent form RPI server"라는 문장을 massagebox에 담아서(-m) 발행(pub)하겠다.
+- mosquitto_sub -d -t messagebox: messagebox(변수)에서 읽겠다.구독하겠다.(sub)
+->터미널을 두개 열어놓고 구독자를 열어놓고 발행클라이언트에서 보내면 문자열이 보내진다. 
+- mosquitto_pub -h 192.168.1.81 -d -t messagebox -m "Message To Send" : -h를 주면 브로커가있는 host IP로 문자열이 보내진다.
+- 다른 ip에 메세지를 보내면 wireshark로 잡아서 확인해보면 프로토콜에 MQTT로 뜨고,TCP로도 뜬다.내 스스로 클라이언트에게 보내면 UDP인듯?
+-subscirbe.py  -> 이제 이 파일을 실행하면 subscribe가 된것이고 다른 터미널창이나 다른곳에서 publish가 되어서 보내면 받아진다.
+import socket
+import fcntl
+import struct
+import paho.mqtt.client as mqtt
+ 
+def on_connect(client, userdata, flags, rc):
+    print("Connected with result code "+str(rc))
+    client.subscribe("hello/world") -> 우린 messagebox를 subscribe하므로 바꿔줌
+ 
+def on_message(client, userdata, msg):
+    print( msg.topic+" "+str(msg.payload))
+ 
+def get_ipaddress(network):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    return socket.inet_ntoa(fcntl.ioctl(
+        s.fileno(),
+        0x8915,  # SIOCGIFADDR
+        struct.pack('256s', network[:15].encode('utf-8'))
+    )[20:24])
+ 
+ 
+port = 1883
+ 
+client = mqtt.Client('RaspberryPI')
+client.on_connect = on_connect
+client.on_message = on_message
+ 
+client.connect(get_ipaddress('eth0'), port, 60) ->ifconfig하면 우린  wlan0를 통해서 통신하지 이더넷0로 하지않으므로 바꿔줘야함,
+client.loop_forever()
+
+- 나중에 프로젝트에서 messgebox가 아닌 LED박스,자이로센서값을 넘기는것 등 좋은 프로젝트가 있다.
+ledscribe.py-> 1을 주었을 때 LED가 켜지고 2가 주어지면 꺼지는 파일
+->mosquitto_pub -d -t ledbox -m 1

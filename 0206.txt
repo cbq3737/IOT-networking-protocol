@@ -1,0 +1,2 @@
+다른 컴퓨터의 한명이 news_sender를 실행하면 나머지 다른 컴퓨터 사용자들이 news_receiver로 IP와 port를 통하여 접속,->multiocast접속, sender를 여는 사람은 계속 방송을 송출하는것이고 client측에선 들어가는 시점부터 sender가 보내고있었던 중간 그 시점을 기준으로 읽는다.
+-카메라 스트리밍: Mjpg-Streamer 설치 및 셋팅(https://webnautes.tistory.com/1261) -> mjpg_streamer -i "input_uvc.so" -o "output_http.so -p 8090 -w /usr/local/share/mjpg-streamer/www/"  -> 싸이트에 내 IP:8090 치면 볼 수 있음.

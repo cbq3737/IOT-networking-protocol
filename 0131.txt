@@ -1,0 +1,63 @@
+INADDR_ANY:매번 소켓생성할때 IP가 바꾸기는 너무 빈번하고 귀찮은 일이기에 할당을 해버린다. 
+INADDR_ANY를 사용하는 첫번째 이유:IP주소가 자동적으로 할당되므로 일일이 안적어줘도 됨, 두번째 이유: multi-homed컴퓨터,multi-server에서 사용이 가능하다.
+터미널에: nslookup 사이트주소 : 그 사이트 주소의 ip주소가 나온다. 
+socketserver.c,socketclient.c는 TCP소켓으로 짜여있다는걸 알 수 있다.->server_fd = socket(AF_INET,SOCK_STREAM,0)에서 SOCK_STREAM으로 되어있기 때문에,그리고 server와 client의 sin_family가 AF,PF로 다른데 요즘엔 상관없지만 일치시켜주는게 중요하다.
+listen(server_fd,5) : fd의 5번으로 전화오는게 있나 listen하고있다고 생각하면 됌.
+server에서  accept(server_fd,(struct sockaddr *)&client_addr,(socklen_t *)&len);은 클라이언트의 정보를 받아오는 단계라고 생각하면 됌.
+
+서로 양쪽에서 채팅하는 프로그램: soctalkserver.c, soctalkclient.c
+soctalkserver실행시 커맨드 라인으로 port번호를 주고 실행시킨뒤 client에서 실행할 때 server의 IP와 server에서 준 port번호를 커맨드라인으로 준 뒤 실행시키면 양방향 통신이 가능해짐.
+-
+TCP
+-soctalkserver.c의 코드:
+server측에 signal처리함수가 존재함,양방향 통신을 위해선 server측에 변수가 int server_sock,client_sock:소켓디스크립터또는 소켓 ID, 소켓에 대한 규약을 짤 땐 sockaddr_in client_addr,server_addr이 필요, char sendline[MAXLINE],recvline[MAXLINE]은 보내고 받기위한 문자열 버퍼가 필수적으로 필요한 변수라고 볼 수있음
+소켓 생성으로 server_sock = socket(PF_INET, SOCK_STREAM, 0)으로 한거보면 family는 PF_INET,그리고 STREAM을 사용으로 TCP소켓 생성이라는걸 알 수있음
+socketserver.c 는  memset(&server_addr,0x00,sizeof(server_addr));를 사용햇는데 여기선 bzero((char *)&server_addr, sizeof(server_addr)); 을 썻는데 bzero는 소켓 주소 구조체 초기화 블락을 0으로 밀어버리겠다라는 뜻 즉 0의 값이 없고 디폴트값이 0이므로 0으로 밀어버리는것이지만 memset은 특정한 값으로 밀어버리는것.
+그다음 생성한 소켓에 server_addr.sin_family = AF_INET;(위 소켓생성에는 PF를 주었지만 원래는 AF를 주는게 맞는 말) ,  server_addr.sin_addr.s_addr = htonl(INADDR_ANY);(ip를 직접 주는 방법으로도 바꿔보자 ex)inet_addr("127,0,0,1")), server_addr.sin_port = htons(atoi(argv[1]));(hard-coded으로도 사용할수있다.) 으로 세팅을 해준다.
+sigaction(SIGCHLD, &act, 0); :signal과 같은 문맥으로 비슷하다고 생각함.signal로 바꿀 수 있어야함.
+bind(server_sock, (struct sockaddr *)&server_addr, sizeof(server_addr))< 0)인 형태로 그냥 외워라
+listen(server_sock, 1); :얘를 듣기위해 대기
+accept(server_sock, (struct sockaddr *)&client_addr, &clnlen)) <0) :클라이언트의 연결요청 수락,server_sock서버쪽 socket아이디랑 포트,주소 정보와 client의 주소,포트정보를 연결시키는 역할임,argument에 있는 client가 진짜 client가아니라 명칭만 client인거를 주의
+여기까지가 기본 socket의 모든 구조와 똑같은 구조라고 생각하고 이해해라.
+양방향 통신이다 보니 fork()를 사용해서 프로세스가 읽고 쓰는것 두개를 만들어서 사용해야한다.
+fork로 나눠서 부모프로세스는 fgets(sendline, MAXLINE, stdin)!=NULL :키보드입력으로 부터 sendline의 크기를 MAXLINE자까지 읽어서 write를 한다.
+strstr(sendline, escapechar) != NULL:문자열을 비교하여서 (strcmp와 비슷하다고 생각) 종료문자열을 치면 종료 그아래 while은 자식프로세스가 죽을때까지 ㄱㄷ?
+그 아래 child인 경우에 while을 돌면서 read역할을 수행한다. if문은 client_sock으로 부터 읽어낸다.만일 읽어내야되는데 size보다 적으면 에러.
+recvline[size] = '\0'; : 제대로 읽었다면 size크기만큼에 널을붙히므로 문자열뒤에 붙히기위함.이게 있으므로 문자열로써 확정이된것.
+strstr(recvline, escapechar) != NULL은 문자열 측에 뭐가있다면 보고 종료 문자열(client으로 부터 받은exit) 입력시에 write를 처리
+
+
+-sotalkclient.c 코드
+char line[MAXLINE], sendline[MAXLINE], recvline[MAXLINE+1];, static int s; ,static struct sockaddr_in server_addr;  :소켓과 관련된 변수
+그 다음 server와 마찬가지로 socket을 생성한다.server와 같은식으로 bzero로 소켓을 먼저 깨끗하게 밀어주었다.
+client이므로 바로 connect(s, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0 , (여기서 s는 server_sock와 같은소켓 디스크립터다.소켓 식별자임,)으로 들어간다.
+server와 마찬가지로 while문으로 들어가서 fgets(sendline, MAXLINE, stdin) != NULL)이라면 if 문의 write(s, sendline, strlen(sendline)) != size 를 보고 printf함,
+아래는 server와 같은 방식으로 돌아감.
+
+1.bzero대신에 memset으로 바꾸기 : bzero((char *)&server_addr, sizeof(server_addr)); ->memset((char *)&server_addr,0x00,sizeof(server_addr)); 로 변경
+- void bzero(void *s, size_t n);  :0x00의 값을 s 영역에 n 크기만큼 초기화 -> 다른 값은 사용 불가능(memset에서 int c가 0x00)
+- void *memset(void *s, int c, size_t n);  c의 값을 s의 영역에 byte 단위로 n 크기만큼 채운다 -> 초기화 대상 값 별도 지정 가능
+
+2.fgets대신에 그냥 gets로 바꿔기. : gets(sendline) != NULL로 바꾼 뒤에 메세지를 받고 출력하는 곳에 printf("%s\n", recvline); %s뒤에 반드시 개행문자가 들어가야한다.
+-char * gets(char * str) : 매개변수로 문자열을 저장할 포인터를 전달하면 되고, 함수가 정상적으로 호출된 경우, 값이 저장된 포인터가 반환되고, 문자열을 읽는 데 실패했다면 NULL 포인터를 반환
+-char *fgets(char *str, int n, FILE *stream) : 매개변수는 gets()와 같이 문자열이 저장될 포인터, 두 번째는 입력받을 문자열의 길이, 세 번째는 입력받을 스트림을 지정
+======
+socketserver.c , socketclient.c가 단방향 프로그램으로 이므로 
+1. ("test test test")계속 보낼것. ->(1)client코드의 client_fd = socket(PF_INET,SOCK_STREAM,0);부터 while(1)으로 감싸면 됨.
+									         (2)나만의 로직 : server의 send부문만 루프돌리고 client의 받는 부분도 while문으로 받아줘야됌.			  
+2.이 프로그램을 soctalkserver,soctalkclient와 같이 바꿔봐라 ->socketserver1.c,socketclient1.c ->안바꿈
+*inet_ntop():ipv4나 ipv6의 주소를 바이너리형태에서 사람이 알아보기 쉬운 텍스트형태로 바꿔준다.
+* send(int sockfd, const void *buf, size_t len, int flags): sockfd : 목적지의 주소정보를 갖는 파일 디스크립터, buf : 전송하기위한 데이터의 포인터, len : 데이터의 길이, flags : 함수의 호출이 어떤일을 할지 나타내는 플래그
+*recv(int sockfd, const void *buf, size_t len, int flags):sockfg : 접속된 소켓의 파일 디스크립터, buf : 수신 데이터를 저장할 버퍼의 포인터, len : 수신할 데이터의 길이,  flags : 함수의 호출이 어떤일을 할지 나타내는 플래그
+
+-------------------------------------------------------------------------------------------------------------------------------------------------
+-UDP
+socketudpserver.c, socketudpclient.c 로 udp파일을 만들어준다. tcp와 다르게 udp서버엔 4가지 단계가 다 있는게 아니고 listen과 accept단계가없다.UDP는 연결자체가없고 해당 내용으로부터 recvfrom,sendto함수를 쓰는것
+TCP와의 큰 차이는 TCP는 연결과 해제를 해야하지만 UDP는 그런 연결이 필요하지않기에 안전성이 낮고 분실,손실성이 높지만 빠르다. 용도는 이메일,파일전송은 안전성이 높고 분실,손실성이 낮은 TCP로 사용,야구중계등 loss가 조금이나마 일어나도괜찮다면 UDP
+UDP와 TCP의 큰차이는 socket(AF_INET,SOCK_DGRAM,0) ,socket(AF_INET,SOCK_STREAM,0)으로 dgram은 UDP,stream은 TCP다
+inet_ntoa():클라이언트 addr넘어온 네트워크 바이트 를 문자열형으로 변환
+UDP단방향 채팅 :socketudpserver1.c, socketudpclient1.c ->UDP는 비연결이기에 서버를 켜놓고 클라이언트를 여러개 켜놓으면 어떤 클라이언트에서 메세지를 보내고 서버에 보내지지만
+TCP는 연결형이기에 서버를 켜놓고 클라이언트를 여러개 띄어놓으면 한가지의 클라이언트에서밖에 전송이안된다.서버와 하나의 클라이언트와만이 연결되어있기 때문이다.
+
+
+ 
